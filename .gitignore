@@ -1,0 +1,4 @@
+.DS_Store
+# keep instrument data out of the repo unless you mean to publish it
+*.zip
+*.csv

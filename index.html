@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FPLC-ed · ÄKTA result to chromatogram &amp; CSV</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="vendor/jszip.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>FPLC-ed</h1>
+      <p class="lede">Turn a UNICORN result export (<code>.zip</code>) into a chromatogram PNG and tidy CSVs.</p>
+    </div>
+  </header>
+
+  <main>
+    <section id="drop" class="drop" tabindex="0">
+      <input id="file" type="file" accept=".zip,application/zip" hidden>
+      <p class="drop-title">Drop a UNICORN result <code>.zip</code> here</p>
+      <p class="drop-sub">or <button type="button" id="browse" class="link">choose a file</button>.
+        In UNICORN Evaluation: <em>File › Export › Result</em>. A zip that contains result zips also works.</p>
+      <p id="status" class="status" role="status"></p>
+    </section>
+
+    <section id="pick" class="card" hidden>
+      <label for="run-select">This zip contains several runs. Choose one:</label>
+      <select id="run-select"></select>
+    </section>
+
+    <div id="workspace" class="workspace" hidden>
+      <aside class="options">
+        <fieldset>
+          <legend>Curves</legend>
+          <p class="hint">Plotted in the PNG and included in the “selected curves” CSV.
+            <button type="button" class="link" id="curves-default">Default</button> ·
+            <button type="button" class="link" id="curves-none">None</button></p>
+          <div id="curve-list" class="curve-list"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Chromatogram</legend>
+          <label class="row">Layout
+            <select id="layout">
+              <option value="overlay" selected>Overlay</option>
+              <option value="stacked">Stacked</option>
+            </select>
+          </label>
+          <label class="row">Volume range
+            <select id="range-preset"></select>
+          </label>
+          <div class="row pair">
+            <label>From <input id="xmin" type="number" step="any" inputmode="decimal"> ml</label>
+            <label>to <input id="xmax" type="number" step="any" inputmode="decimal"> ml</label>
+          </div>
+          <label class="check"><input type="checkbox" id="show-phases" checked> Mark method phases</label>
+          <label class="check"><input type="checkbox" id="show-fractions" checked> Mark fractions</label>
+          <label class="row">Title <input id="title" type="text"></label>
+          <label class="check"><input type="checkbox" id="show-subtitle" checked> Column, system and date under title</label>
+          <label class="row">Size
+            <select id="size">
+              <option value="1600x900">16:9 (slides)</option>
+              <option value="1600x800">2:1 (wide)</option>
+              <option value="1600x1200">4:3</option>
+              <option value="1200x1200">Square</option>
+            </select>
+          </label>
+          <label class="row">Resolution
+            <select id="res">
+              <option value="1">Standard (1600 px wide)</option>
+              <option value="2" selected>High (3200 px wide)</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>CSV</legend>
+          <label class="check"><input type="checkbox" id="add-time"> Add time column (min)</label>
+          <label class="check"><input type="checkbox" id="add-cv"> Add column volumes (CV) column</label>
+          <label class="check"><input type="checkbox" id="csv-range"> Limit CSVs to the volume range above</label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Download</legend>
+          <label class="check"><input type="checkbox" name="out" value="png" checked> Chromatogram (PNG)</label>
+          <label class="check"><input type="checkbox" name="out" value="selected" checked> Selected curves (CSV)</label>
+          <label class="check"><input type="checkbox" name="out" value="all" checked> All curves (CSV)</label>
+          <label class="check"><input type="checkbox" name="out" value="method" checked> Method &amp; run log (TXT)</label>
+          <button type="button" id="download" class="primary">Download</button>
+          <p class="hint" id="download-note"></p>
+        </fieldset>
+      </aside>
+
+      <section class="results">
+        <div class="preview card">
+          <div class="card-head">
+            <h2>Chromatogram</h2>
+            <button type="button" class="copy" id="copy-chart">Copy image</button>
+          </div>
+          <div class="canvas-wrap" id="canvas-wrap">
+            <canvas id="chart"></canvas>
+            <div id="crosshair" class="crosshair" hidden></div>
+            <div id="tooltip" class="tooltip" hidden></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Run</h2>
+            <button type="button" class="copy" id="copy-run">Copy</button>
+          </div>
+          <dl id="run-info" class="kv"></dl>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Method</h2>
+            <button type="button" class="copy" id="copy-method" title="Copies inlets and phases as plain text">Copy</button>
+          </div>
+          <details class="buffers" open>
+            <summary>Buffers on each line (optional)</summary>
+            <p class="hint">Typed buffers appear in the summary below, in what you copy, and in the TXT download.
+              Lines left blank stay empty.</p>
+            <table id="inlet-table" class="data">
+              <thead><tr><th>Inlet</th><th>Buffer</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </details>
+          <h3>Inlets used</h3>
+          <ul id="inlet-list" class="inlets"></ul>
+          <div id="fractions-block">
+            <h3>Fractions</h3>
+            <div class="scroll-x">
+              <table id="fraction-table" class="data"><thead></thead><tbody></tbody></table>
+            </div>
+          </div>
+          <h3>Phases</h3>
+          <ol id="phase-list" class="phases"></ol>
+          <details>
+            <summary>Method variables (<span id="var-count">0</span>)</summary>
+            <table id="var-table" class="data"><tbody></tbody></table>
+          </details>
+          <details>
+            <summary>Method outline</summary>
+            <pre id="method-outline"></pre>
+          </details>
+          <details>
+            <summary>Run log (<span id="log-count">0</span> entries)</summary>
+            <div class="scroll">
+              <table id="log-table" class="data">
+                <thead><tr><th class="num">ml</th><th class="num">min</th><th>Entry</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </details>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    Tested on UNICORN 7.12 exports from an ÄKTA pure.
+    <a href="https://github.com/Edan97/FPLC-ed">Source on GitHub</a>
+  </footer>
+</body>
+</html>
