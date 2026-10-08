@@ -35,14 +35,14 @@ body {
   font: 15px/1.45 var(--font);
 }
 code { font-size: 0.92em; }
-h1 { margin: 0; font-size: 1.6rem; }
+h1 { margin: 0; font-size: 2.4rem; line-height: 1.1; }
 h2 { margin: 0 0 0.6rem; font-size: 1.05rem; }
 
 .top {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: flex-start; /* opening the how-to panel never moves the title */
   gap: 0.5rem 2rem;
   padding: 1.5rem 2rem 1rem;
   max-width: 1500px;
@@ -233,3 +233,34 @@ details.buffers { margin: 0 0 0.5rem; }
 .inlets { margin: 0.25rem 0 0; padding-left: 1.1rem; font-size: 0.92rem; }
 .inlets li { margin: 0.15rem 0; }
 .inlets .buf { font-weight: 600; }
+
+.top-actions { display: flex; align-items: flex-start; gap: 0.6rem; }
+.btn, .howto summary {
+  font: 500 0.9rem var(--font);
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+.btn:hover, .howto summary:hover { border-color: var(--text-muted); }
+.howto { position: relative; margin: 0; }
+.howto summary { list-style: none; color: var(--text-primary); }
+.howto summary::-webkit-details-marker { display: none; }
+.howto[open] summary { border-color: var(--accent); }
+.howto-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 10;
+  width: 20rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  padding: 0.75rem 1rem;
+}
+.howto-panel ol { margin: 0; padding-left: 1.2rem; }
+.howto-panel li { margin: 0.2rem 0; }
+.under-drop { display: flex; justify-content: flex-end; margin-top: 0.6rem; }

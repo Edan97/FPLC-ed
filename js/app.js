@@ -560,6 +560,8 @@ drop.addEventListener("click", (e) => {
   if (e.target.id !== "browse") $("file").click();
 });
 $("browse").addEventListener("click", () => $("file").click());
+// Navigate rather than reload so browsers don't restore the previous form state.
+$("reset").addEventListener("click", () => location.replace(location.pathname));
 drop.addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === " ") {
     e.preventDefault();
