@@ -6,9 +6,11 @@ const SKIP_FRACTION_TEXT = new Set(["Waste", "Frac", "Waste(Frac)"]);
 // Run log instructions worth noting under a phase (inlets are reported separately as volumes).
 const NOTE_PATTERNS = [
   /^Wavelength\b/, /^Injection valve\b/, /^Column position\b/, /^pH valve\b/, /^Outlet valve\b/,
-  /^Sample\b/, /^Inject\b/, /^Message\b/, /^Fractionation\b/,
-  /^Hold\b/, /^Pause\b/,
+  /^Inject\b/, /^Message\b/, /^Fractionation\b/, /^Pause\b/,
 ];
+
+// Fractionation stop instructions; UNICORN logs them as (Ignored) when nothing was being collected.
+const STOP_FRAC = /^Stop (?:peak )?frac(?:tionation| in outlet valve)\b/;
 
 /** "Inlet A A1 (Issued) (Processing)" -> "Inlet A A1"; null for entries that aren't issued instructions. */
 function instruction(text) {
@@ -55,28 +57,84 @@ export function phaseSummary(result) {
 
   // Walk the run log once: phase boundaries, inlet/%B state changes, notes per phase.
   const phases = [];
-  const changes = []; // {volume, A, B, sample, grad}
-  const state = { A: null, B: null, sample: null, grad: { v0: 0, from: 0, to: 0, len: 0 }, flow: null };
+  const changes = []; // {volume, A, B, sample, valve, basis, grad}
+  // basis: which pump the run's volume axis follows ("system", or "sample" while the sample pump loads).
+  const state = {
+    A: null, B: null, sample: null, valve: null, basis: "system",
+    grad: { v0: 0, from: 0, to: 0, len: 0 }, flow: null,
+  };
+  const pumpDrivesVolume = result.runLog.some((e) => /calculated based on the sample flow/.test(e.text));
   let current = null;
   for (const e of result.runLog) {
     const ins = instruction(e.text);
-    if (!ins) continue;
+    let m;
+    if (!ins) {
+      // System messages and outcomes that aren't issued instructions.
+      if ((m = e.text.match(/^The method flow is now calculated based on the (sample|system) flow/))) {
+        state.basis = m[1];
+        changes.push({ volume: e.volume, ...state });
+      } else if (!current) {
+        // nothing to attach the rest to yet
+      } else if ((m = e.text.match(/^(.+?) \(Ignored\)/)) && STOP_FRAC.test(m[1])) {
+        const k = current.stops.findLastIndex((s) => s.text === m[1]);
+        if (k !== -1) current.stops.splice(k, 1);
+      } else if (/^Hold until Condition Occurred .*\(Processing\) \(System\)/.test(e.text)) {
+        const hold = current.holds.at(-1);
+        if (hold && hold.met == null) hold.met = e.volume;
+      } else if (/^Peak start \(System\)/.test(e.text)) {
+        current.peaks.push({ start: e.volume, end: null });
+      } else if (/^Peak end \(System\)/.test(e.text)) {
+        const peak = current.peaks.at(-1);
+        if (peak && peak.end == null) peak.end = e.volume;
+      }
+      continue;
+    }
     if (ins.startsWith("Phase ")) {
       current = {
         name: ins.slice(6).trim(), start: e.volume, startTime: e.time,
-        flows: [], pctB: [], notes: [], washes: [],
+        flows: [], sampleFlows: [], pctB: [], notes: [], washes: [],
+        holds: [], peaks: [], stops: [], stopIssued: false, pumpWashes: [], injectAt: null, systemOff: false,
       };
       phases.push(current);
       continue;
     }
     if (!current) continue;
-    let m;
     if ((m = ins.match(/^Inlet ([AB]) (\S+)/))) {
       state[m[1]] = m[2];
       changes.push({ volume: e.volume, ...state });
-    } else if ((m = ins.match(/^Sample (?:inlet|pump|valve)\s+(\S+)/i))) {
+    } else if ((m = ins.match(/^Sample (?:inlet|valve) (\S+)/))) {
       state.sample = m[1];
       changes.push({ volume: e.volume, ...state });
+    } else if ((m = ins.match(/^Sample pump wash (.+)/))) {
+      current.pumpWashes.push({ text: clean(m[1]), volume: e.volume });
+    } else if ((m = ins.match(/^Sample flow ([\d.]+) \{([^}]*)\}/))) {
+      const text = `${m[1]} ${m[2]}`;
+      if (parseFloat(m[1]) > 0 && !current.sampleFlows.includes(text)) current.sampleFlows.push(text);
+    } else if ((m = ins.match(/^Injection valve (.+)/))) {
+      const pos = clean(m[1]);
+      state.valve = pos;
+      changes.push({ volume: e.volume, ...state });
+      // Priming to waste shows up as an inlet volume; Manual load after a direct inject just resets the valve.
+      if (pos === "Direct inject") {
+        current.injectAt ??= e.volume;
+        current.notes.push("Injection valve Direct inject (sample pump onto column)");
+      } else if (!(pos === "Sample pump waste" || (pos === "Manual load" && current.injectAt != null))) {
+        const text = clean(ins);
+        if (!current.notes.includes(text)) current.notes.push(text);
+      }
+    } else if ((m = ins.match(/^Hold until (.+)/))) {
+      current.holds.push({ text: clean(m[1]), met: null, at: e.volume });
+    } else if ((m = ins.match(/^Peak fractionation parameters (.+?) (Level|Slope|Level and slope|Level or slope) ([\d.]+) \{min\} ([\d.]+) \{([^}]*)\} ([\d.]+) \{([^}]*)\} ([\d.]+) \{([^}]*)\} ([\d.]+) \{([^}]*)\}/))) {
+      const [, source, mode, width, startLvl, lvlUnit, startSlope, slopeUnit, endLvl, , endSlope] = m;
+      const parts = [`Peak detection on ${source}, ${mode} mode`, `start level ${startLvl} ${lvlUnit}`, `end level ${endLvl} ${lvlUnit}`];
+      if (/slope/i.test(mode)) parts.push(`start slope ${startSlope} ${slopeUnit}`, `end slope ${endSlope} ${slopeUnit}`);
+      parts.push(`min peak width ${width} min`);
+      current.notes.push(parts.join(", "));
+    } else if (/^Peak fractionation parameters\b/.test(ins)) {
+      current.notes.push(clean(ins));
+    } else if (STOP_FRAC.test(ins)) {
+      current.stopIssued = true;
+      current.stops.push({ text: ins, volume: e.volume });
     } else if ((m = ins.match(/^Gradient ([\d.]+) \{%B\} ([\d.]+) \{([^}]*)\}/))) {
       const target = parseFloat(m[1]);
       const length = parseFloat(m[2]);
@@ -89,9 +147,12 @@ export function phaseSummary(result) {
     } else if ((m = ins.match(/^System flow ([\d.]+) \{([^}]*)\}/))) {
       if (m[2] === "ml/min") state.flow = parseFloat(m[1]);
       const text = `${m[1]} ${m[2]}`;
-      if (!current.flows.includes(text)) current.flows.push(text);
+      if (parseFloat(m[1]) === 0) current.systemOff = true;
+      else if (!current.flows.includes(text)) current.flows.push(text);
     } else if ((m = ins.match(/^Fractionation Volume (.+?) tubes ([\d.]+) \{ml\}/))) {
       current.fracSize = `${m[2]} ml each, ${m[1]} tubes`;
+    } else if ((m = ins.match(/^Peak fractionation Volume (.+?) tubes ([\d.]+) \{ml\}/))) {
+      current.fracSize = `peak fractionation, up to ${m[2]} ml per tube, ${m[1]} tubes`;
     } else if ((m = ins.match(/^System wash (.*)/))) {
       current.washes.push({ text: clean(m[1]), A: state.A, B: state.B });
     } else if (NOTE_PATTERNS.some((re) => re.test(ins))) {
@@ -103,28 +164,44 @@ export function phaseSummary(result) {
   // Volume drawn from each inlet per phase: split each stretch of constant inlets into
   // B (integral of Conc B) and A (the rest).
   const stateAt = (v) => {
-    let s = { A: null, B: null, sample: null, grad: { v0: 0, from: 0, to: 0, len: 0 } };
+    let s = { A: null, B: null, sample: null, valve: null, basis: "system", grad: { v0: 0, from: 0, to: 0, len: 0 } };
     for (const c of changes) {
       if (c.volume > v) break;
       s = c;
     }
     return s;
   };
-  /** [{inlet, volume}] drawn while the system volume went from a to b. */
+  /**
+   * [{inlet, volume, prime}] drawn while the run volume went from a to b. While the sample pump
+   * drives the volume axis, the volume is sample (to waste when the injection valve says so, which
+   * is priming) and the system pump draws nothing.
+   */
   const usesBetween = (a, b, minVolume) => {
     const bounds = [a, ...changes.map((c) => c.volume).filter((v) => v > a && v < b), b];
     const uses = new Map();
-    const add = (inlet, vol) => inlet && vol > 0 && uses.set(inlet, (uses.get(inlet) || 0) + vol);
+    const add = (inlet, vol, prime = 0) => {
+      if (!inlet || !(vol > 0)) return;
+      const u = uses.get(inlet) || { volume: 0, prime: 0 };
+      u.volume += vol;
+      u.prime += prime;
+      uses.set(inlet, u);
+    };
     for (let k = 0; k + 1 < bounds.length; k++) {
       const [s0, s1] = [bounds[k], bounds[k + 1]];
       const s = stateAt(s0);
+      if (s.basis === "sample") {
+        add(s.sample || "Sample", s1 - s0, s.valve === "Sample pump waste" ? s1 - s0 : 0);
+        continue;
+      }
       const bVol = volumeB(s.grad, s0, s1);
       add(s.A, s1 - s0 - bVol);
       add(s.B, bVol);
     }
-    const sVol = sampleVolume(sampleFlow, a, b);
-    if (sVol > 0) add(`Sample${stateAt(a).sample ? " " + stateAt(a).sample : ""}`, sVol);
-    return [...uses].filter(([, v]) => v >= minVolume).map(([inlet, volume]) => ({ inlet, volume }));
+    if (!pumpDrivesVolume) {
+      const sVol = sampleVolume(sampleFlow, a, b);
+      if (sVol > 0) add(stateAt(a).sample || "Sample", sVol);
+    }
+    return [...uses].filter(([, u]) => u.volume >= minVolume).map(([inlet, u]) => ({ inlet, ...u }));
   };
 
   phases.forEach((ph, i) => {
@@ -136,12 +213,41 @@ export function phaseSummary(result) {
 
     const fr = result.fractions.filter((f) => !SKIP_FRACTION_TEXT.has(f.text) && f.volume >= ph.start && f.volume < ph.end);
     ph.fractions = fr.length ? { first: fr[0].text, last: fr[fr.length - 1].text, count: fr.length } : null;
+
+    // Notes that need the whole phase (outcomes logged later, or the phase end).
+    for (const h of ph.holds) {
+      const air = h.text.match(/^Air sample inlet Equals Air ([\d.]+) (\S+)/);
+      if (air) {
+        const met = h.met != null ? `; air detected at ${ml(h.met)}` : `; stopped at max volume`;
+        ph.notes.push(`Inject all sample: hold until air at sample inlet, max ${air[1]} ${air[2]}${met}`);
+      } else {
+        ph.notes.push(`Hold until ${h.text}${h.met != null ? ` (met at ${ml(h.met)})` : ""}`);
+      }
+    }
+    if (ph.pumpWashes.length) {
+      const when = ph.injectAt == null ? []
+        : [ph.pumpWashes.some((w) => w.volume <= ph.injectAt) && "before", ph.pumpWashes.some((w) => w.volume > ph.injectAt) && "after"].filter(Boolean);
+      const what = [...new Set(ph.pumpWashes.map((w) => w.text))].join(", ");
+      ph.notes.push(`Sample pump wash with ${what}${when.length ? ` ${when.join(" and ")} loading` : ""}`);
+    }
+    for (const p of ph.peaks) {
+      ph.notes.push(`Peak collected ${p.start.toFixed(2)}–${(p.end ?? ph.end).toFixed(2)} ml`);
+    }
+    for (const s of ph.stops) {
+      const what = /peak/.test(s.text) ? "Peak fractionation" : "Fractionation";
+      ph.notes.push(`${what} stopped at ${ml(s.volume)}${ph.end - s.volume < 0.2 ? " (end of phase)" : ""}`);
+    }
+    if (ph.stopIssued && !ph.stops.length && !ph.fractions && !ph.fracSize) ph.notes.push("No fractionation");
   });
 
   // Inlets across the run, in A, B, sample order, with total volume drawn.
   const totals = new Map();
+  const primes = new Map();
   for (const ph of phases) {
-    for (const u of ph.uses) totals.set(u.inlet, (totals.get(u.inlet) || 0) + u.volume);
+    for (const u of ph.uses) {
+      totals.set(u.inlet, (totals.get(u.inlet) || 0) + u.volume);
+      if (u.prime) primes.set(u.inlet, (primes.get(u.inlet) || 0) + u.prime);
+    }
     for (const w of ph.washes) {
       for (const inlet of [w.A, w.B]) if (inlet && !totals.has(inlet)) totals.set(inlet, 0);
     }
@@ -149,7 +255,7 @@ export function phaseSummary(result) {
   const washed = new Set(phases.flatMap((ph) => ph.washes.flatMap((w) => [w.A, w.B])));
   const rank = (n) => (/^A/.test(n) ? 0 : /^B/.test(n) ? 1 : 2);
   const inlets = [...totals]
-    .map(([inlet, total]) => ({ inlet, total, washed: washed.has(inlet) }))
+    .map(([inlet, total]) => ({ inlet, total, prime: primes.get(inlet) || 0, washed: washed.has(inlet) }))
     .sort((a, b) => rank(a.inlet) - rank(b.inlet) || a.inlet.localeCompare(b.inlet, undefined, { numeric: true }));
 
   // Each collected fraction runs until the next fraction event (including a switch to waste).
@@ -184,20 +290,29 @@ export function phaseSummary(result) {
 
 const ml = (v) => `${v.toFixed(2)} ml`;
 
+/** " (1.07 ml primed to waste, 11.12 ml injected)" for sample inlets that were primed. */
+const primeText = (u) => (u.prime >= 0.005 ? ` (${ml(u.prime)} primed to waste, ${ml(u.volume - u.prime)} injected)` : "");
+
 /** Lines describing one phase (without the header), using buffer names where given. */
 export function phaseLines(ph, buffers = {}) {
   const name = (inlet) => (buffers[inlet] ? `${inlet} (${buffers[inlet]})` : inlet);
   const lines = [];
-  for (const u of ph.uses) lines.push(`${name(u.inlet)}: ${ml(u.volume)}`);
+  for (const u of ph.uses) lines.push(`${name(u.inlet)}: ${ml(u.volume)}${primeText(u)}`);
   for (const w of ph.washes) {
     const via = [w.A, w.B].filter(Boolean).map(name).join(" / ");
     lines.push(`System wash ${w.text}${via ? ` using ${via}` : ""}`);
   }
-  const run = [...ph.flows.map((f) => `Flow ${f}`), ...ph.pctB].join(" · ");
+  // While the sample pump loads, the system flow is off; its set-point at the phase end isn't news.
+  const flows = ph.sampleFlows.length && ph.systemOff
+    ? ph.sampleFlows.map((f) => `Sample flow ${f} (system flow off while loading)`)
+    : [...(ph.systemOff ? ["System flow off"] : []), ...ph.flows.map((f) => `Flow ${f}`), ...ph.sampleFlows.map((f) => `Sample flow ${f}`)];
+  const run = [...flows, ...ph.pctB].join(" · ");
   if (run) lines.push(run);
   if (ph.fractions) {
     const f = ph.fractions;
     lines.push(`Fractions ${f.first}${f.count > 1 ? ` – ${f.last}` : ""} (${f.count})${ph.fracSize ? ` · ${ph.fracSize}` : ""}`);
+  } else if (ph.fracSize) {
+    lines.push(`No fractions collected · ${ph.fracSize}`);
   }
   for (const n of ph.notes) lines.push(n);
   return lines;
@@ -214,7 +329,8 @@ export function phaseHeader(ph) {
  * unfilled line can be completed after pasting.
  */
 export function inletLine(i, buffers = {}) {
-  const vol = i.total > 0 ? `${ml(i.total)}${i.washed ? " + system wash" : ""}` : "system wash only";
+  const vol = i.prime >= 0.005 ? `${ml(i.total - i.prime)} injected + ${ml(i.prime)} prime`
+    : i.total > 0 ? `${ml(i.total)}${i.washed ? " + system wash" : ""}` : "system wash only";
   return `${i.inlet} (${vol}): ${buffers[i.inlet] || ""}`.trimEnd();
 }
 

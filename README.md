@@ -15,6 +15,9 @@ chromatogram PNG and tidy CSVs. Everything runs in your browser and files are ne
   with a line to write in the buffer (or type it on the page first), then a fraction table (phase,
   volume range, inlets being pumped, max A280), then each phase with what it
   drew from each inlet (e.g. *Column Wash: A1 50.41 ml*), flow, %B, fractions and system washes.
+  Sample pump loading (e.g. desalting) shows the sample inlet split into prime to waste and injected
+  volume, the air-sensor stop, and pump washes; peak fractionation shows its detection settings,
+  collected peaks and where fractionation stopped.
   Followed by method variables, the full method outline and the instrument run log.
 
 Both CSVs use a fixed volume step (default 0.01 ml) like the UNICORN evaluation table. Each row holds
