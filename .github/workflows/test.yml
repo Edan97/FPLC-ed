@@ -13,4 +13,4 @@ jobs:
         with:
           node-version: 22
       # The tests use only Node's built-in runner; no npm install needed.
-      - run: node --test tests/
+      - run: node --test 'tests/*.test.mjs'

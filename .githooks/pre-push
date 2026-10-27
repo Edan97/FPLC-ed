@@ -7,7 +7,7 @@ if ! command -v node >/dev/null 2>&1; then
   exit 1
 fi
 echo "pre-push: running tests…"
-if ! node --test tests/ >/tmp/fplc-ed-tests.log 2>&1; then
+if ! node --test 'tests/*.test.mjs' >/tmp/fplc-ed-tests.log 2>&1; then
   grep -E "^✖|^ℹ (tests|pass|fail)" /tmp/fplc-ed-tests.log >&2
   echo "pre-push: tests failed, push stopped. Full output in /tmp/fplc-ed-tests.log" >&2
   exit 1

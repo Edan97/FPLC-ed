@@ -4,8 +4,8 @@
   "type": "module",
   "description": "Tests and fixture tooling for the FPLC-ed web page (the page itself has no build step).",
   "scripts": {
-    "test": "node --test tests/",
-    "test:update": "UPDATE_SNAPSHOTS=1 node --test tests/",
+    "test": "node --test \"tests/*.test.mjs\"",
+    "test:update": "UPDATE_SNAPSHOTS=1 node --test \"tests/*.test.mjs\"",
     "fixture": "node tests/tools/make-fixture.mjs"
   },
   "devDependencies": {
