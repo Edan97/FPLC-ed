@@ -1,0 +1,40 @@
+INLETS USED
+  A1 (96.19 ml + system wash):
+  B1 (system wash only):
+  S6 (8.04 ml injected + 1.07 ml prime):
+
+FRACTIONS
+  Fraction   Phase     Volume (ml)   Size (ml)   Intake   Max A280 (mAU)
+  1.A.3      Elution   32.67–41.82   9.15        A1       247
+
+PHASES
+1. Method Settings
+     Flow 10.000 ml/min
+     Message "You are running in cold environment. Please enable Reduce for cold room in Method Settings."
+     Wavelength 280 nm Off nm 214 nm
+     Injection valve Manual load
+     Column position 2 Down flow
+     pH valve In-line In-line
+
+2. Equilibration  ·  0.00–16.19 ml (16.18 ml, 0.3 CV)  ·  0.1–1.9 min
+     A1: 16.18 ml
+     System wash 15 ml Injection valve (W1) using A1 / B1
+     Flow 10.000 ml/min · 0 %B
+     Hold until UV 1 Stable signal 0.03 min 5.00 min (met at 0.17 ml)
+
+3. Sample Application  ·  16.19–25.46 ml (9.28 ml, 0.2 CV)  ·  1.9–3.1 min
+     A1: 0.17 ml
+     S6: 9.11 ml (1.07 ml primed to waste, 8.04 ml injected)
+     Sample flow 10.000 ml/min (system flow off while loading)
+     Injection valve Direct inject (sample pump onto column)
+     Inject all sample: hold until air at sample inlet, max 12.00 ml; air detected at 25.38 ml
+     Sample pump wash with Buffer before and after loading
+     No fractionation
+
+4. Elution  ·  25.46–105.30 ml (79.84 ml, 1.5 CV)  ·  3.1–11.6 min
+     A1: 79.84 ml
+     Flow 10.000 ml/min · 0 %B
+     Fractions 1.A.3 (1) · peak fractionation, up to 45.0 ml per tube, 50 ml tubes
+     Peak detection on UV1 (U9-M), Level mode, start level 5.00 mAU, end level 5.00 mAU, min peak width 0.80 min
+     Peak collected 32.67–41.82 ml
+     Peak fractionation stopped at 105.27 ml (end of phase)

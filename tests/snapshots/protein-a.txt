@@ -1,0 +1,58 @@
+INLETS USED
+  A1 (100.73 ml + system wash):
+  A2 (25.78 ml + system wash):
+  A3 (15.15 ml + system wash):
+  B1 (25.29 ml + system wash):
+
+FRACTIONS
+  Fraction   Phase              Volume (ml)   Size (ml)   Intake   Max A280 (mAU)
+  1.A.1      Column Wash        0.12–25.11    24.99       A1       1716
+  1.A.2      Column Wash        25.11–50.11   25.00       A1       2
+  1.A.3      Column Wash        50.11–50.40   0.29        A1       1
+  3.A.1      Elution 1 pH 3.4   50.58–55.58   5.01        B1       1
+  3.A.2      Elution 1 pH 3.4   55.58–60.58   5.00        B1       1017
+  3.A.3      Elution 1 pH 3.4   60.58–65.58   5.00        B1       1032
+  3.A.4      Elution 1 pH 3.4   65.58–70.58   5.01        B1       90
+  3.A.5      Elution 1 pH 3.4   70.58–75.58   5.00        B1       21
+  3.B.1      Elution 1 pH 3.4   75.58–75.73   0.15        B1       7
+
+PHASES
+1. Method Settings
+     Flow 5.000 ml/min
+     Wavelength 280 nm Off nm 214 nm
+     Injection valve Manual load
+     Column position 1 Down flow
+     pH valve In-line In-line
+
+2. Column Wash  ·  0.00–50.41 ml (50.41 ml, 10.0 CV)  ·  0.1–10.2 min
+     A1: 50.41 ml
+     Flow 5.000 ml/min · 0 %B
+     Fractions 1.A.1 – 1.A.3 (3) · 25.0 ml each, 50 ml tubes
+     Message "You are running in cold environment. Please enable Reduce for cold room in Method Settings."
+     Fractionation stopped at 50.39 ml (end of phase)
+
+3. Elution 1 pH 3.4  ·  50.41–75.74 ml (25.33 ml, 5.0 CV)  ·  10.2–15.3 min
+     B1: 25.29 ml
+     Flow 5.000 ml/min · 100 %B
+     Fractions 3.A.1 – 3.B.1 (6) · 5.0 ml each, 15 ml tubes
+     Fractionation stopped at 75.72 ml (end of phase)
+
+4. MQW wash  ·  75.74–101.55 ml (25.81 ml, 5.1 CV)  ·  15.3–20.5 min
+     A2: 25.78 ml
+     System wash 15 ml Injection valve (W1) using A2 / B1
+     Flow 5.000 ml/min · 0 %B
+
+5. Column CIP  ·  101.55–116.72 ml (15.17 ml, 3.0 CV)  ·  20.5–23.6 min
+     A3: 15.15 ml
+     System wash 15 ml Injection valve (W1) using A3 / B1
+     Flow 5.000 ml/min · 0 %B
+     pH valve Off-line In-line
+     Message "Maintenance solution: "
+     Column position 1 Down flow
+     Outlet valve Waste
+     pH valve In-line In-line
+
+6. Equilibration  ·  116.72–167.04 ml (50.32 ml, 10.0 CV)  ·  23.6–33.7 min
+     A1: 50.32 ml
+     System wash 15 ml Injection valve (W1) using A1 / B1
+     Flow 5.000 ml/min · 0 %B

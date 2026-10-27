@@ -39,6 +39,7 @@ A zip that contains one or more result zips (e.g. a folder you zipped up) also w
 | `js/plot.js` | Chromatogram rendering (shared by the preview and the PNG) |
 | `js/summary.js` | Inlets used and per-phase volumes, from the run log |
 | `vendor/jszip.min.js` | [JSZip](https://stuk.github.io/jszip/) 3.10.1 for reading zips in the browser |
+| `tests/` | Tests for the lab-book summary on a Protein A purification and two desalting runs, plus edge cases |
 | `python/` | The original Python reader/CLI (`unicorn-export`) and [notes on the file format](python/docs/FILE_FORMAT.md) |
 
 ## Running locally
@@ -49,6 +50,29 @@ ES modules don't load from `file://`, so serve the folder:
 python3 -m http.server
 # open http://localhost:8000
 ```
+
+## Tests
+
+The tests need [Node.js](https://nodejs.org/) 22 or later (`brew install node`) and nothing else:
+
+```bash
+npm test
+```
+
+They check the method & run log summary on anonymised copies of real runs in `tests/fixtures/`:
+a Protein A purification and two desalting runs (sample pump loading, peak fractionation), plus
+hand-written run logs for edge cases. `tests/snapshots/` holds the full expected text for each run.
+
+- **Before every push:** run `git config core.hooksPath .githooks` once per clone. The pre-push hook
+  then runs the tests and stops the push if any fail.
+- **On GitHub:** the *Tests* workflow runs them on every push and pull request.
+- **After an intended change to the output:** `npm run test:update` rewrites the snapshots; read the
+  diff before committing.
+- **Adding a run:** `npm install` once, then
+  `npm run fixture -- "Result.zip" tests/fixtures/name.json --redact "Your Name" --redact "sample ID"`.
+  It keeps only what the summary reads, blanks result folders, computer, sample marks and batch IDs,
+  and refuses to write if a `--redact` string is still there. The repo is public, so look over the
+  fixture before committing it.
 
 ## Caveats
 
